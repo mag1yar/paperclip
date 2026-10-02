@@ -742,6 +742,10 @@ Paperclip also persists an empty `OPENAI_API_KEY` override for those agents so a
 
 If the `codex` CLI is not installed or not on `PATH`, `codex_local` agent runs fail at execution time with a clear adapter error. Quota polling uses a short-lived `codex app-server` subprocess: when `codex` cannot be spawned, that provider reports `ok: false` in aggregated quota results and the API server keeps running (it must not exit on a missing binary).
 
+Local Codex ACP runs use the installed `codex` CLI (or the adapter's `command`) through `CODEX_PATH`. An explicit adapter `env.CODEX_PATH` takes precedence over the host `CODEX_PATH`, then `command`, then `codex` on `PATH`. Remote ACP runs retain their target runtime. GPT-6.1 Sol (`gpt-6.1-sol`) is included in the local adapter catalog with Fast mode and reasoning levels through Ultra; use Codex CLI 0.159.1 or newer and an account with access to the model.
+
+Codex connection hello tests use `--skip-git-repo-check` so a project directory that is not trusted by Codex does not block credential validation. These ephemeral tests disable repository instructions and plugin synchronization.
+
 Local adapters require their corresponding CLI/session setup on the machine running Paperclip. External adapters are installed through the adapter/plugin flow and should not require hardcoded imports in `server/` or `ui/`.
 
 ## Project Repository Checkouts

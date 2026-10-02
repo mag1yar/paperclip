@@ -130,6 +130,7 @@ function setNodeVersion(version: string): void {
 }
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   setNodeVersion(originalNodeVersion);
   if (originalPaperclipHome === undefined) delete process.env.PAPERCLIP_HOME;
   else process.env.PAPERCLIP_HOME = originalPaperclipHome;
@@ -508,7 +509,7 @@ describe("codex_local ACP lane", () => {
     });
   });
 
-  it.each([["gpt-6-astra", "ultra"], ["gpt-6-sol", "ultra"], ["gpt-6-luna", "max"], ["gpt-5.6-sol", "ultra"], ["gpt-5.6-terra", "ultra"], ["gpt-5.6-luna", "max"]])("forwards %s controls to the ACPX Codex target", (model, effort) => {
+  it.each([["gpt-6.1-sol", "ultra"], ["gpt-6-astra", "ultra"], ["gpt-6-sol", "ultra"], ["gpt-6-luna", "max"], ["gpt-5.6-sol", "ultra"], ["gpt-5.6-terra", "ultra"], ["gpt-5.6-luna", "max"]])("forwards %s controls to the ACPX Codex target", (model, effort) => {
     expect(buildCodexAcpConfig({
       engine: "acp",
       model,
@@ -725,6 +726,29 @@ describe("codex_local ACP lane", () => {
     );
   });
 
+  it.each([
+    [undefined, "", undefined, "codex"],
+    ["/opt/codex", "", undefined, "/opt/codex"],
+    ["/opt/codex", "/host/codex", undefined, "/host/codex"],
+    ["/opt/codex", "/host/codex", "/agent/codex", "/agent/codex"],
+  ])("uses the local CLI with CODEX_PATH precedence (%s, %s, %s)", async (command, hostPath, agentPath, expected) => {
+    vi.stubEnv("CODEX_PATH", hostPath);
+    const root = await makeTempRoot("paperclip-codex-acp-cli-");
+    const meta: AdapterInvocationMeta[] = [];
+    const execute = createCodexAcpExecutor({
+      createRuntime: (options) => new FakeRuntime(options as FakeRuntimeOptions) as never,
+    });
+    const result = await execute(buildContext(root, {
+      config: {
+        command,
+        env: { CODEX_HOME: path.join(root, "codex-home"), CODEX_PATH: agentPath },
+      },
+      onMeta: async (payload) => { meta.push(payload); },
+    }));
+    expect(result.exitCode).toBe(0);
+    expect(meta[0]?.env?.CODEX_PATH).toBe(expected);
+  });
+
   it("executes through ACPX with Codex session config and ephemeral skills", async () => {
     const root = await makeTempRoot("paperclip-codex-acp-exec-");
     const skill = await createRuntimeSkill(root);
@@ -911,6 +935,7 @@ describe("codex_local ACP lane", () => {
   });
 
   it("seeds the managed Codex home into the sandbox and repoints CODEX_HOME to the in-sandbox path", async () => {
+    vi.stubEnv("CODEX_PATH", "/host/codex");
     const root = await makeTempRoot("paperclip-codex-acp-home-seed-");
     const localCwd = path.join(root, "worktree");
     const remoteCwd = path.join(root, "remote-workspace");
@@ -963,6 +988,7 @@ describe("codex_local ACP lane", () => {
     );
 
     expect(result.exitCode).toBe(0);
+    expect(meta[0]?.env?.CODEX_PATH).toBeUndefined();
     const remappedCodexHome = String(meta[0]?.env?.CODEX_HOME ?? "");
     // C2 — the managed home was repointed onto an in-sandbox path, distinct from
     // the host managed home; it is NOT the host CODEX_HOME.

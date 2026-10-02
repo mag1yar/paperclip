@@ -386,10 +386,10 @@ export async function testEnvironment(
     } else {
       const execArgs = buildCodexExecArgs(
         { ...config, fastMode: false },
-        { skipGitRepoCheck: targetIsSandbox },
+        { skipGitRepoCheck: true },
       );
       // A connection test needs one small response, not plugin catalog sync,
-      // repository instructions, or a durable session. Keep provider/model
+      // repository trust, repository instructions, or a durable session. Keep provider/model
       // configuration intact while removing unrelated startup work.
       const args = [...execArgs.args];
       args.splice(args.length - 1, 0,

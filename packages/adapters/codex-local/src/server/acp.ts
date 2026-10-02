@@ -363,9 +363,21 @@ export function createCodexAcpExecutor(options: CodexAcpExecutorOptions = {}): C
       currentExecutor = createAcpxEngineExecutor(withCodexAcpDefaults(options));
       executor = currentExecutor;
     }
+    const config = buildCodexAcpConfig(ctx.config);
+    const target = readAdapterExecutionTarget({
+      executionTarget: ctx.executionTarget,
+      legacyRemoteExecution: ctx.executionTransport?.remoteExecution,
+    });
+    if (target?.kind !== "remote") {
+      const env = parseObject(config.env);
+      config.env = {
+        ...env,
+        CODEX_PATH: firstNonEmptyString(env.CODEX_PATH, process.env.CODEX_PATH, config.command) ?? "codex",
+      };
+    }
     const result = await currentExecutor({
       ...ctx,
-      config: buildCodexAcpConfig(ctx.config),
+      config,
     });
     return withCodexAuthRefreshFailureClassification(result);
   };

@@ -7,13 +7,16 @@ import { testEnvironment } from "@paperclipai/adapter-codex-local/server";
 const itWindows = process.platform === "win32" ? it : it.skip;
 const itPosix = process.platform === "win32" ? it.skip : it;
 
-async function runProbeFixture(options: { failCleanup?: boolean; error?: string } = {}) {
+async function runProbeFixture(options: { failCleanup?: boolean; error?: string; requireTrustBypass?: boolean } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-probe-result-"));
   const capture = path.join(root, "capture.json");
   const command = path.join(root, "codex");
   await fs.writeFile(command, `#!${process.execPath}
 const fs = require('node:fs');
 fs.writeFileSync(process.env.PROBE_CAPTURE, JSON.stringify({ args: process.argv.slice(2), home: process.env.CODEX_HOME }));
+if (process.env.PROBE_REQUIRE_TRUST_BYPASS === 'true' && !process.argv.includes('--skip-git-repo-check')) {
+  console.error('Not inside a trusted directory and --skip-git-repo-check was not specified.'); process.exit(1);
+}
 console.error('WARN codex_core_plugins::manager: remote installed plugin bundle sync failed error=chatgpt authentication required for remote plugin catalog');
 const error = process.env.PROBE_ERROR;
 if (error) { console.error(error); process.exit(1); }
@@ -30,6 +33,7 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:1,output_t
       config: { engine: "cli", command, cwd: root, env: {
         OPENAI_API_KEY: "fixture-key", PROBE_CAPTURE: capture,
         PROBE_ERROR: options.error ?? "", PATH: `${root}${path.delimiter}${process.env.PATH ?? ""}`,
+        PROBE_REQUIRE_TRUST_BYPASS: String(options.requireTrustBypass ?? false),
       } },
     });
     return { result, capture: JSON.parse(await fs.readFile(capture, "utf8")) as { args: string[]; home: string } };
@@ -52,6 +56,13 @@ describe("codex_local environment diagnostics", () => {
     expect(result.status).toBe("pass");
     expect(result.checks).toContainEqual(expect.objectContaining({ code: "codex_hello_probe_passed" }));
     expect(result.checks).not.toContainEqual(expect.objectContaining({ code: "codex_hello_probe_auth_required" }));
+  });
+
+  itPosix("validates credentials when the project directory is not trusted by Codex", async () => {
+    const { result, capture } = await runProbeFixture({ requireTrustBypass: true });
+    expect(result.status).toBe("pass");
+    expect(result.checks).toContainEqual(expect.objectContaining({ code: "codex_hello_probe_passed" }));
+    expect(capture.args.filter((arg) => arg === "--skip-git-repo-check")).toHaveLength(1);
   });
 
   itPosix("does not diagnose an unrelated plugin login warning as model authentication failure", async () => {
